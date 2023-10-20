@@ -133,6 +133,7 @@ class GPTQ(GPxQ):
                              device=dev,
                              dtype=torch.float32)
         self.nsamples = 0
+        self.num_blocks = num_blocks
 
     def update_batch(self, module, input, current_layer):
         if self.disable_pre_forward_hook:

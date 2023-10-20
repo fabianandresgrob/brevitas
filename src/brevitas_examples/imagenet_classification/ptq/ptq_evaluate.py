@@ -207,6 +207,11 @@ parser.add_argument(
     default=3,
     type=int,
     help='Exponent bit width used with float quantization for activations (default: 3)')
+parser.add_argument(
+    '--accumulator-bit-width',
+    default=None,
+    type=int,
+    help='Accumulator Bit Width for GPFQ in combination with A2Q (default: None)')
 add_bool_arg(parser, 'gptq', default=False, help='GPTQ (default: disabled)')
 add_bool_arg(parser, 'gpfq', default=False, help='GPFQ (default: disabled)')
 add_bool_arg(
@@ -363,7 +368,12 @@ def main():
 
     if args.gpfq:
         print("Performing GPFQ:")
-        apply_gpfq(calib_loader, quant_model, p=args.gpfq_p, act_order=args.gpfq_act_order)
+        apply_gpfq(
+            calib_loader,
+            quant_model,
+            p=args.gpfq_p,
+            act_order=args.gpfq_act_order,
+            accumulator_bit_width=args.accumulator_bit_width)
 
     if args.gptq:
         print("Performing GPTQ:")
