@@ -15,6 +15,7 @@ from brevitas.graph.gpxq import gpxq_mode
 from brevitas.graph.gpxq import StopFwdException
 from brevitas.graph.gpxq import SUPPORTED_CONV_OP
 import brevitas.nn as qnn
+from brevitas.nn.utils import get_upper_bound_on_l1_norm
 
 
 class gpfq_mode(gpxq_mode):
@@ -48,7 +49,7 @@ class gpfq_mode(gpxq_mode):
             p: float = 1.0,
             return_forward_output: bool = False,
             act_order: bool = False,
-            accumulator_bit_width=None) -> None:
+            accumulator_bit_width: int = None) -> None:
         if not inplace:
             model = deepcopy(model)
         super().__init__(
@@ -109,7 +110,7 @@ class gpfq_mode(gpxq_mode):
                 create_weight_orig=create_weight_orig,
                 p=self.p)
         else:
-            return GPA2Q(
+            return GPFA2Q(
                 layer=layer,
                 name=name,
                 act_order=act_order,
@@ -272,44 +273,26 @@ class GPFQ(GPxQ):
         del self.quantized_input
 
 
-class L1NormMixin(ABC):
-
-    def __init__(self, accumulator_bit_width) -> None:
-        self.accumulator_bit_width = accumulator_bit_width
-
-    def get_upper_bound_on_l1_norm(self, input_bit_width: Tensor, input_is_signed: bool) -> Tensor:
-        """Calculate the upper bound on the l1-norm of the weights using the derivations from
-        `Quantized Neural Networks for Low-Precision Accumulation with Guaranteed Overflow Avoidance`
-        by I.Colbert, A.Pappalardo, and J.Petri-Koenig."""
-        assert input_bit_width is not None, "A2Q relies on input bit-width."
-        assert input_is_signed is not None, "A2Q relies on input sign."
-        input_is_signed = float(input_is_signed)  # 1. if signed else 0.
-        max_accumulator_bit_width = self.accumulator_bit_width  # P
-        max_accumulator_mag = pow(2., max_accumulator_bit_width - 1.) - 1.  # 2^{P-1}-1
-        max_input_mag_inverse = pow(2., input_is_signed - input_bit_width)
-        return max_accumulator_mag * max_input_mag_inverse
-
-
-class GPA2Q(GPFQ, L1NormMixin):
+class GPFA2Q(GPFQ):
 
     def __init__(
             self,
             layer,
             name,
             act_order,
-            parallel_layers=1,
+            len_parallel_layers=1,
             create_weight_orig=True,
             accumulator_bit_width=None,
-            p=0.25) -> None:
+            p=1.0) -> None:
         GPFQ.__init__(
             self,
             layer=layer,
             name=name,
             act_order=act_order,
-            parallel_layers=parallel_layers,
+            len_parallel_layers=len_parallel_layers,
             create_weight_orig=create_weight_orig,
             p=p)
-        L1NormMixin.__init__(self, accumulator_bit_width)
+        self.accumulator_bit_width = accumulator_bit_width
 
     def single_layer_update(self):
         weight = self.layer.weight.data
@@ -328,24 +311,41 @@ class GPA2Q(GPFQ, L1NormMixin):
         # get upper bound
         input_bit_width = self.layer.quant_input_bit_width()
         input_is_signed = self.layer.is_quant_input_signed
-        T = self.get_upper_bound_on_l1_norm(input_bit_width, input_is_signed)
+        T = get_upper_bound_on_l1_norm(self.accumulator_bit_width, input_bit_width, input_is_signed)
         s = self.layer.quant_weight_scale()
 
-        permutation_list = [torch.tensor(range(weight.shape[-1]))]
         l1_norm = torch.zeros(weight.shape[:-1], device=dev)
+
+        # We don't need full Hessian, we just need the diagonal
+        self.H_diag = self.quantized_input.transpose(2, 1).square().sum(
+            2)  # summing over Batch dimension
+        permutation_list = []
+        for group_index in range(self.groups):
+            if self.act_order:
+                # Re-order Hessian_diagonal so that weights associated to
+                # higher magnitude activations are quantized first
+                perm = torch.argsort(self.H_diag[group_index, :], descending=True)
+            else:
+                # No permutation, permutation tensor is a ordered index
+                perm = torch.tensor(range(weight.shape[-1]), device=dev)
+            permutation_list.append(perm)
+
         for t in range(weight.shape[-1]):
             for group_index in range(self.groups):
                 U[group_index] += torch.matmul(
-                    weight[group_index, :, t].unsqueeze(1),
-                    self.float_input[group_index, :,
-                                     t].unsqueeze(0))  #[OC/Groups, 1] * [1, INSHAPE[1]]
-                norm = torch.linalg.norm(self.quantized_input[group_index, :, t], 2) ** 2
+                    weight[group_index, :, permutation_list[group_index][t]].unsqueeze(1),
+                    self.float_input[group_index, :, permutation_list[group_index][t]].unsqueeze(
+                        0))  #[OC/Groups, 1] * [1, INSHAPE[1]]
+                norm = torch.linalg.norm(
+                    self.quantized_input[group_index, :, permutation_list[group_index][t]], 2) ** 2
                 if norm > 0:
-                    q_arg = U[group_index].matmul(self.quantized_input[group_index, :, t]) / norm
+                    q_arg = U[group_index].matmul(
+                        self.quantized_input[group_index, :,
+                                             permutation_list[group_index][t]]) / norm
                 else:
                     q_arg = torch.zeros_like(U[group_index, :, 0])
 
-                weight[group_index, :, t] = q_arg
+                weight[group_index, :, permutation_list[group_index][t]] = q_arg
             q = self.get_quant_weights(t, 0, permutation_list)
 
             for group_index in range(self.groups):
@@ -353,13 +353,14 @@ class GPA2Q(GPFQ, L1NormMixin):
                 candidate_l1_mask = candidate_l1 > T * s
                 if torch.any(candidate_l1_mask):
                     # set all values to 0 that are exceeding T * s
-                    weight[group_index, :, t][candidate_l1_mask] = 0
+                    weight[group_index, :, permutation_list[group_index][t]][candidate_l1_mask] = 0
                     q[group_index][candidate_l1_mask] = 0
                 else:
                     l1_norm[group_index] = candidate_l1
                 U[group_index] -= torch.matmul(
                     q[group_index].unsqueeze(1),
-                    self.quantized_input[group_index, :, t].unsqueeze(0))
+                    self.quantized_input[group_index, :,
+                                         permutation_list[group_index][t]].unsqueeze(0))
 
         del self.float_input
         del self.quantized_input

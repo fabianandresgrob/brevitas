@@ -166,8 +166,7 @@ add_bool_arg(
     'weight-narrow-range',
     default=True,
     help='Narrow range for weight quantization (default: enabled)')
-parser.add_argument(
-    '--gpfq-p', default=1.0, type=float, help='P parameter for GPFQ (default: 0.25)')
+parser.add_argument('--gpfq-p', default=1.0, type=float, help='P parameter for GPFQ (default: 1.0)')
 parser.add_argument(
     '--quant-format',
     default='int',
@@ -272,6 +271,7 @@ def main():
         f"GPFQ P: {args.gpfq_p} - "
         f"GPTQ Act Order: {args.gptq_act_order} - "
         f"GPFQ Act Order: {args.gpfq_act_order} - "
+        f"GPFQ Accumulator Bit Width: {args.accumulator_bit_width} - "
         f"Learned Round: {args.learned_round} - "
         f"Weight narrow range: {args.weight_narrow_range} - "
         f"Bias bit width: {args.bias_bit_width} - "

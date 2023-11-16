@@ -472,7 +472,7 @@ def apply_gptq(calib_loader, model, act_order=False):
                 gptq.update()
 
 
-def apply_gpfq(calib_loader, model, act_order, p=0.25, accumulator_bit_width=None):
+def apply_gpfq(calib_loader, model, act_order, p=1.0, accumulator_bit_width=None):
     model.eval()
     dtype = next(model.parameters()).dtype
     device = next(model.parameters()).device
