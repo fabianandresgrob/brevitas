@@ -14,7 +14,7 @@ from brevitas.core.restrict_val import _RestrictClampValue
 from brevitas.core.stats import SCALAR_SHAPE
 from brevitas.core.stats.stats_wrapper import _Stats
 from brevitas.function import abs_binary_sign_grad
-from brevitas.nn.utils import get_upper_bound_on_l1_norm
+from brevitas.function import get_upper_bound_on_l1_norm
 
 __all__ = ["ParameterPreScalingWeightNorm", "AccumulatorAwareParameterPreScaling"]
 

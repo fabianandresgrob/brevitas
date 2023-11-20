@@ -1,21 +1,19 @@
 # Copyright (C) 2023, Advanced Micro Devices, Inc. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 
-from abc import ABC
 from copy import deepcopy
 from typing import List, Optional
 
 import numpy as np
 import torch
-from torch import Tensor
 import unfoldNd
 
+from brevitas.function import get_upper_bound_on_l1_norm
 from brevitas.graph.gpxq import GPxQ
 from brevitas.graph.gpxq import gpxq_mode
 from brevitas.graph.gpxq import StopFwdException
 from brevitas.graph.gpxq import SUPPORTED_CONV_OP
 import brevitas.nn as qnn
-from brevitas.nn.utils import get_upper_bound_on_l1_norm
 
 
 class gpfq_mode(gpxq_mode):
