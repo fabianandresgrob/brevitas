@@ -311,6 +311,7 @@ class GPFA2Q(GPFQ):
         input_is_signed = self.layer.is_quant_input_signed
         T = get_upper_bound_on_l1_norm(self.accumulator_bit_width, input_bit_width, input_is_signed)
         s = self.layer.quant_weight_scale()
+        s = s.view(self.groups, -1)  # [Groups, OC/Groups]
 
         l1_norm = torch.zeros(weight.shape[:-1], device=dev)
 
@@ -348,7 +349,7 @@ class GPFA2Q(GPFQ):
 
             for group_index in range(self.groups):
                 candidate_l1 = l1_norm[group_index] + torch.abs(q[group_index])
-                candidate_l1_mask = candidate_l1 > T * s
+                candidate_l1_mask = candidate_l1 > T * s[group_index]
                 if torch.any(candidate_l1_mask):
                     # set all values to 0 that are exceeding T * s
                     weight[group_index, :, permutation_list[group_index][t]][candidate_l1_mask] = 0
