@@ -1,25 +1,21 @@
 python ptq_benchmark_torchvision.py $1 --calibration-dir /scratch/datasets/imagenet_symlink/calibration --validation-dir /scratch/datasets/imagenet_symlink/val \
---quant_format float \
+--model_name resnet18 \
+--quant_format int \
 --scale_factor_type float_scale \
---weight_bit_width 2 3 4 5 6 7 8 \
---act_bit_width 2 3 4 5 6 7 8 \
---weight_mantissa_bit_width 1 2 3 4 5 6 \
---weight_exponent_bit_width 1 2 3 4 5 6 \
---act_mantissa_bit_width 1 2 3 4 5 6 \
---act_exponent_bit_width 1 2 3 4 5 6 \
---bias_bit_width None \
---weight_quant_granularity per_channel per_tensor \
---act_quant_type sym \
+--weight_bit_width 4 5 6 7 8 \
+--act_bit_width 4 5 6 7 8 \
+--bias_bit_width 32 \
+--weight_quant_granularity per_channel \
+--act_quant_type sym asym \
 --weight_param_method stats \
 --act_param_method mse \
 --bias_corr True \
+--act_equalization True \
 --graph_eq_iterations 20 \
 --graph_eq_merge_bias True \
---act_equalization layerwise \
 --learned_round False \
---gptq False \
---gptq_act_order False \
---gpfq False \
---gpfq_p None \
+--gpfq True \
+--gpfq_act_order True False \
+--accumulator_bit_width 16 None \
 --uint_sym_act_for_unsigned_values False \
 --act_quant_percentile None \

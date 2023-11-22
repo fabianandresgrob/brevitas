@@ -7,6 +7,7 @@ from itertools import product
 import os
 import random
 from types import SimpleNamespace
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -37,6 +38,7 @@ from brevitas_examples.imagenet_classification.utils import SEED
 from brevitas_examples.imagenet_classification.utils import validate
 
 config.IGNORE_MISSING_KEYS = True
+warnings.filterwarnings("ignore")
 
 
 def parse_type(v, default_type):
@@ -93,12 +95,14 @@ OPTIONS_DEFAULT = {
     'bias_corr': [True],  # Bias Correction
     'graph_eq_iterations': [20],  # Graph Equalization
     'graph_eq_merge_bias': [True],  # Merge bias for Graph Equalization
-    'act_equalization': ['layerwise'],  # Perform Activation Equalization (Smoothquant)
+    'act_equalization': [None],  # Perform Activation Equalization (Smoothquant)
     'learned_round': [False],  # Enable/Disable Learned Round
-    'gptq': [True],  # Enable/Disable GPTQ
+    'gptq': [False],  # Enable/Disable GPTQ
     'gpfq': [False],  # Enable/Disable GPFQ
-    'gpfq_p': [0.75],  # GPFQ P
+    'gpfq_p': [1.0],  # GPFQ P
     'gptq_act_order': [False],  # Use act_order euristics for GPTQ
+    'gpfq_act_order': [False],
+    'accumulator_bit_width': [16],
     'act_quant_percentile': [99.999],  # Activation Quantization Percentile
     'uint_sym_act_for_unsigned_values': [True],  # Whether to use unsigned act quant when possible
 }
@@ -247,7 +251,12 @@ def ptq_torchvision_models(args):
 
     if config_namespace.gpfq:
         print("Performing GPFQ:")
-        apply_gpfq(calib_loader, quant_model, p=config_namespace.gpfq_p)
+        apply_gpfq(
+            calib_loader,
+            quant_model,
+            p=config_namespace.gpfq_p,
+            act_order=config_namespace.gpfq_act_order,
+            accumulator_bit_width=config_namespace.accumulator_bit_width)
 
     if config_namespace.gptq:
         print("Performing gptq")
@@ -271,7 +280,17 @@ def ptq_torchvision_models(args):
     acc_ratio = np.around(top1 / fp_accuracy, decimals=3)
 
     options_names = [k.replace('_', ' ').capitalize() for k in config_namespace.__dict__.keys()]
+    row = [[v for _, v in config_namespace.__dict__.items()] + [
+        fp_accuracy,
+        top1,
+        acc_diff,
+        acc_ratio,
+        args.calibration_samples,
+        args.batch_size_calibration,
+        torch_version,
+        brevitas_version]]
     torchvision_df = pd.DataFrame(
+        row,
         columns=options_names + [
             'Top 1% floating point accuracy',
             'Top 1% quant accuracy',
@@ -281,18 +300,9 @@ def ptq_torchvision_models(args):
             'Calibration batch size',
             'Torch version',
             'Brevitas version'])
-    torchvision_df.at[0, :] = [v for _, v in config_namespace.__dict__.items()] + [
-        fp_accuracy,
-        top1,
-        acc_diff,
-        acc_ratio,
-        args.calibration_samples,
-        args.batch_size_calibration,
-        torch_version,
-        brevitas_version]
     folder = './multirun/' + str(args.idx)
     os.makedirs(folder, exist_ok=True)
-    torchvision_df.to_csv(os.path.join(folder, 'RESULTS_TORCHVISION.csv'), index=False)
+    torchvision_df.to_csv(os.path.join(folder, 'RESULTS_LPA_TESTS.csv'), index=False)
 
 
 def validate_config(config_namespace):
