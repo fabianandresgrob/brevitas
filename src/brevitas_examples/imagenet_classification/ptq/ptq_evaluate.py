@@ -210,13 +210,12 @@ parser.add_argument(
     '--accumulator-bit-width',
     default=None,
     type=int,
-    help='Accumulator Bit Width for GPFQ in combination with A2Q (default: None)')
+    help='Accumulator Bit Width for GPFA2Q (default: None)')
 add_bool_arg(parser, 'gptq', default=False, help='GPTQ (default: disabled)')
 add_bool_arg(parser, 'gpfq', default=False, help='GPFQ (default: disabled)')
+add_bool_arg(parser, 'gpfa2q', default=False, help='GPFA2Q (default: disabled)')
 add_bool_arg(
-    parser, 'gptq-act-order', default=False, help='GPTQ Act order heuristic (default: disabled)')
-add_bool_arg(
-    parser, 'gpfq-act-order', default=False, help='GPFQ Act order heuristic (default: disabled)')
+    parser, 'gpxq-act-order', default=False, help='GPxQ Act order heuristic (default: disabled)')
 add_bool_arg(parser, 'learned-round', default=False, help='Learned round (default: disabled)')
 add_bool_arg(parser, 'calibrate-bn', default=False, help='Calibrate BN (default: disabled)')
 
@@ -246,8 +245,8 @@ def main():
         f"w{args.weight_bit_width}_"
         f"{'gptq_' if args.gptq else ''}"
         f"{'gpfq_' if args.gpfq else ''}"
-        f"{'gptq_act_order_' if args.gptq_act_order else ''}"
-        f"{'gpfq_act_order_' if args.gpfq_act_order else ''}"
+        f"{'gpfa2q_' if args.gpfa2q else ''}"
+        f"{'gpxq_act_order_' if args.gpxq_act_order else ''}"
         f"{'learned_round_' if args.learned_round else ''}"
         f"{'weight_narrow_range_' if args.weight_narrow_range else ''}"
         f"{args.bias_bit_width}bias_"
@@ -268,10 +267,10 @@ def main():
         f"Weight bit width: {args.weight_bit_width} - "
         f"GPTQ: {args.gptq} - "
         f"GPFQ: {args.gpfq} - "
+        f"GPFA2Q: {args.gpfa2q} - "
         f"GPFQ P: {args.gpfq_p} - "
-        f"GPTQ Act Order: {args.gptq_act_order} - "
-        f"GPFQ Act Order: {args.gpfq_act_order} - "
-        f"GPFQ Accumulator Bit Width: {args.accumulator_bit_width} - "
+        f"GPxQ Act Order: {args.gpxq_act_order} - "
+        f"GPFA2Q Accumulator Bit Width: {args.accumulator_bit_width} - "
         f"Learned Round: {args.learned_round} - "
         f"Weight narrow range: {args.weight_narrow_range} - "
         f"Bias bit width: {args.bias_bit_width} - "
@@ -368,16 +367,21 @@ def main():
 
     if args.gpfq:
         print("Performing GPFQ:")
+        apply_gpfq(calib_loader, quant_model, p=args.gpfq_p, act_order=args.gpxq_act_order)
+
+    if args.gpfa2q:
+        print("Performing GPFA2Q:")
         apply_gpfq(
             calib_loader,
             quant_model,
             p=args.gpfq_p,
-            act_order=args.gpfq_act_order,
+            act_order=args.gpxq_act_order,
+            gpfa2q=args.gpfa2q,
             accumulator_bit_width=args.accumulator_bit_width)
 
     if args.gptq:
         print("Performing GPTQ:")
-        apply_gptq(calib_loader, quant_model, act_order=args.gptq_act_order)
+        apply_gptq(calib_loader, quant_model, act_order=args.gpxq_act_order)
 
     if args.learned_round:
         print("Applying Learned Round:")

@@ -47,6 +47,7 @@ class gpfq_mode(gpxq_mode):
             p: float = 1.0,
             return_forward_output: bool = False,
             act_order: bool = False,
+            gpfa2q: bool = False,
             accumulator_bit_width: int = None) -> None:
         if not inplace:
             model = deepcopy(model)
@@ -62,6 +63,9 @@ class gpfq_mode(gpxq_mode):
         self.orig_forward = self.model.forward
         self.model.forward = self.catch_stopfwd
         self.p = p
+
+        # GPFA2Q params
+        self.gpfa2q = gpfa2q
         self.accumulator_bit_width = accumulator_bit_width
 
     def catch_stopfwd(self, *args, **kwargs):
@@ -99,7 +103,7 @@ class gpfq_mode(gpxq_mode):
 
     def initialize_module_optimizer(
             self, layer, name, act_order, len_parallel_layers, create_weight_orig):
-        if not self.accumulator_bit_width:
+        if not self.gpfa2q:
             return GPFQ(
                 layer=layer,
                 name=name,

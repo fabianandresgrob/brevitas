@@ -210,6 +210,7 @@ def get_upper_bound_on_l1_norm(
     by I.Colbert, A.Pappalardo, and J.Petri-Koenig."""
     assert input_bit_width is not None, "A2Q relies on input bit-width."
     assert input_is_signed is not None, "A2Q relies on input sign."
+    assert accumulator_bit_width is not None, "A2Q relies on accumulator bit-width."
     input_is_signed = float(input_is_signed)  # 1. if signed else 0.
     max_accumulator_bit_width = accumulator_bit_width  # P
     max_accumulator_mag = pow(2., max_accumulator_bit_width - 1.) - 1.  # 2^{P-1}-1

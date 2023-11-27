@@ -5,17 +5,18 @@ python ptq_benchmark_torchvision.py $1 --calibration-dir /scratch/datasets/image
 --weight_bit_width 4 5 6 7 8 \
 --act_bit_width 4 5 6 7 8 \
 --bias_bit_width 32 \
+--layerwise_first_last_bit_width 8 6 \
 --weight_quant_granularity per_channel \
---act_quant_type sym asym \
+--act_quant_type sym \
 --weight_param_method stats \
 --act_param_method mse \
 --bias_corr True \
---act_equalization True \
+--act_equalization layerwise None \
 --graph_eq_iterations 20 \
 --graph_eq_merge_bias True \
 --learned_round False \
---gpfq True \
---gpfq_act_order True False \
---accumulator_bit_width 16 None \
+--gpfa2q True \
+--gpxq_act_order True False \
+--accumulator_bit_width 16 \
 --uint_sym_act_for_unsigned_values False \
 --act_quant_percentile None \
