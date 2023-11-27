@@ -11,12 +11,12 @@ python ptq_benchmark_torchvision.py $1 --calibration-dir /scratch/datasets/image
 --weight_param_method stats \
 --act_param_method mse \
 --bias_corr True \
---act_equalization layerwise None \
+--act_equalization None \
 --graph_eq_iterations 20 \
 --graph_eq_merge_bias True \
 --learned_round False \
---gpfa2q True \
+--gpfq True False \
+--gpfa2q True False \
 --gpxq_act_order True False \
 --accumulator_bit_width 16 \
 --uint_sym_act_for_unsigned_values False \
---act_quant_percentile None \

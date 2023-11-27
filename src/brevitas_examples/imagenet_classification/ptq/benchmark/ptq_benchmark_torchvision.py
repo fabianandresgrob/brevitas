@@ -97,7 +97,7 @@ OPTIONS_DEFAULT = {
     'bias_corr': [True],  # Bias Correction
     'graph_eq_iterations': [20],  # Graph Equalization
     'graph_eq_merge_bias': [True],  # Merge bias for Graph Equalization
-    'act_equalization': [None],  # Perform Activation Equalization (Smoothquant)
+    'act_equalization': ['layerwise'],  # Perform Activation Equalization (Smoothquant)
     'learned_round': [False],  # Enable/Disable Learned Round
     'gptq': [False],  # Enable/Disable GPTQ
     'gpfq': [False],  # Enable/Disable GPFQ
@@ -273,7 +273,7 @@ def ptq_torchvision_models(args):
 
     if config_namespace.gptq:
         print("Performing gptq")
-        apply_gptq(calib_loader, quant_model, config_namespace.gptq_act_order)
+        apply_gptq(calib_loader, quant_model, config_namespace.gpxq_act_order)
 
     if config_namespace.learned_round:
         print("Applying Learned Round:")
@@ -332,8 +332,10 @@ def validate_config(config_namespace):
     if (config_namespace.target_backend == 'fx' or config_namespace.target_backend
             == 'layerwise') and config_namespace.bias_bit_width == 16:
         is_valid = False
-    # If GPTQ is disabled, we do not care about the act_order heuristic
-    if not config_namespace.gptq and config_namespace.gptq_act_order:
+    # Only one of GPTQ, GPFQ, or GPA2Q can be enabled
+    multiple_gpxqs = float(config_namespace.gpfq) + float(config_namespace.gptq) + float(
+        config_namespace.gpfa2q)
+    if multiple_gpxqs != 1:
         is_valid = False
 
     if config_namespace.act_equalization == 'layerwise' and config_namespace.target_backend == 'fx':
@@ -343,9 +345,12 @@ def validate_config(config_namespace):
 
     if config_namespace.act_param_method == 'mse':
         config_namespace.act_quant_percentile = None
-
-    if not config_namespace.gpfq:
+    # gpfq_p is needed for GPFQ and GPFA2Q
+    if not config_namespace.gpfq and not config_namespace.gpfa2q:
         config_namespace.gpfq_p = None
+    # accumulator bit width is not needed when not GPFA2Q
+    if not config_namespace.gpfa2q:
+        config_namespace.accumulator_bit_width = None
 
     if config_namespace.quant_format == 'int':
         config_namespace.weight_mantissa_bit_width = None
