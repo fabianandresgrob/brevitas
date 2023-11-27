@@ -82,7 +82,7 @@ def validate(val_loader, model):
 
             output = model(images)
             # measure accuracy
-            acc1, = accuracy(output, target, stable=True)
+            acc1, = accuracy(output, target, stable=False)
             top1.update(acc1[0], images.size(0))
 
         print_accuracy(top1, 'Total:')

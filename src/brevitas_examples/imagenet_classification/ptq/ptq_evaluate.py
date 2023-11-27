@@ -215,6 +215,11 @@ add_bool_arg(
     parser, 'gpfq-act-order', default=False, help='GPFQ Act order heuristic (default: disabled)')
 add_bool_arg(parser, 'learned-round', default=False, help='Learned round (default: disabled)')
 add_bool_arg(parser, 'calibrate-bn', default=False, help='Calibrate BN (default: disabled)')
+add_bool_arg(
+    parser,
+    'bfloat',
+    default=False,
+    help='Cast model to torch.bfloat16 before quantizing (default: disabled)')
 
 
 def main():
@@ -327,6 +332,11 @@ def main():
     if args.act_equalization is not None:
         print("Applying activation equalization:")
         apply_act_equalization(model, calib_loader, layerwise=args.act_equalization == 'layerwise')
+
+    # cast quant_model to bfloat16
+    if args.bfloat:
+        print("Casting the model to torch.bfloat16:")
+        model.to(torch.bfloat16)
 
     # Define the quantized model
     quant_model = quantize_model(
