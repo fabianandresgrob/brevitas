@@ -104,8 +104,11 @@ class QuantTensor(QuantTensorBase):
 
     @property
     def _pre_round_int_value(self):
-        int_value = self.value / self.scale
-        int_value = int_value + self.zero_point
+        value = self.value.to(torch.float32, copy=True)
+        scale = self.scale.to(torch.float32, copy=True)
+        zero_point = self.zero_point.to(torch.float32, copy=True)
+        int_value = value / scale
+        int_value = int_value + zero_point
         return int_value
 
     @property
