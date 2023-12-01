@@ -9,37 +9,44 @@ from brevitas.graph.base import GraphTransform
 from brevitas.graph.equalize import _extract_regions
 
 
-def _channels_maxabs(module, split_input):
+def _channels_maxabs(module, splits_per_layer, split_input):
     # works for Conv2d and Linear
     dim = 1 - int(split_input)
     # dim 0 -> input channels max, dim 1 -> output channels max!
-    max_per_channel = module.weight.data.abs().max(dim=dim).values.flatten()
-    channels = torch.argsort(max_per_channel, descending=True)
-    return channels
+    if len(module.weight.data.shape) > 1:
+        if isinstance(module, nn.Conv2d):
+            # TODO make sure when splitting input channel this will return input channels
+            max_per_channel = module.weight.abs().flatten(dim).max(dim).values
+        elif isinstance(module, nn.Linear):
+            max_per_channel = module.weight.data.abs().max(dim=dim).values.flatten()
+        channels = torch.argsort(max_per_channel, descending=True)
+    else:
+        # BN etc. don't have multiple dimensions, so just do argsort desc
+        channels = torch.argsort(module.weight.data, descending=True)
+    return channels[:splits_per_layer]
 
 
 def _channels_to_split(
         modules: List[nn.Module], split_criterion: str, split_ratio: float,
-        split_input: bool) -> List[int]:
-    # how are we taking channels across multiple sources?
-    # the sources must all have the same num of output channels, if we split output channels
-    # the criterion could also give different channels to split for each source, so we have to think
-    # about how to select a intersection of channels to split for each source
-
-    num_channels = module.weight.shape[int(split_input)]
-    num_channels_to_split = int(math.ceil(split_ratio * num_channels))
+        split_input: bool) -> Dict[nn.Module, List[torch.Tensor]]:
+    # the modules are all of the same shape so we can just take the first one
+    num_channels = modules[0].weight.shape[int(split_input)]
+    total_splits = int(math.ceil(split_ratio * num_channels))
+    # each channel in the sources only splits a portion of the total splits
+    if not split_input:
+        splits_per_layer = int(math.floor(total_splits / len(modules)))
+    else:
+        # if we split input channels, each module has to split the whole budget
+        splits_per_layer = total_splits
+    assert splits_per_layer > 0, f"No channels to split in {modules} with split_rati {split_ratio}!"
 
     module_to_channels = {}
     if split_criterion == 'maxabs':
         for module in modules:
-            channels = _channels_maxabs(module, split_input)
-            module_to_channels[module] = channels
+            module_to_channels[module] = _channels_maxabs(module, splits_per_layer, split_input)
 
-    # select the intersection of channels as the channels to split
-    # Note: this is just one approach of selecting a shared subset of channels to choose, this might end up not selecting any channel or using less channels than
-    channels_to_split = set.intersection(*map(set, module_to_channels.values()))
-
-    return channels_to_split[:num_channels_to_split]
+    # return dict with modules as key and channels to split as value
+    return module_to_channels
 
 
 def _split_channels(
@@ -52,6 +59,7 @@ def _split_channels(
     """
     # change it to .data attribute
     weight = layer.weight.data
+    bias = layer.bias.data
 
     for id in channels_to_split:
         if isinstance(layer, torch.nn.Conv2d):
@@ -92,41 +100,25 @@ def _split_channels(
     layer.weight.data = weight
 
 
-def _split_channels_region(srcs, sinks, channels, split_ratio, grid_aware, split_input):
-    if split_input:
-        for module in srcs:
+def _split_channels_region(
+        module_to_split: Dict[nn.Module, torch.tensor],
+        modules_to_duplicate: [nn.Module],
+        split_input: bool,
+        grid_aware: bool = False):
+    # we are getting a dict[Module, channels to split]
+    # splitting output channels
+    # concat all channels that are split so we can duplicate those in the input channels later
+    if not split_input:
+        input_channels = torch.cat(list(module_to_split.values()))
+        for module, channels in module_to_split.items():
+            _split_channels(module, channels, grid_aware=grid_aware)
+        for module in modules_to_duplicate:
+            # then duplicate the input_channels for all modules in the sink
             _split_channels(
-                module,
-                channels,
-                split_ratio,
-                grid_aware=grid_aware,
-                split_input=True,
-                split_factor=1)
-        for module in sinks:
-            _split_channels(
-                module,
-                channels,
-                split_ratio,
-                grid_aware=grid_aware,
-                split_input=True,
-                split_factor=0.5)
+                module, input_channels, grid_aware=False, split_factor=1, split_input=True)
     else:
-        for module in srcs:
-            _split_channels(
-                module,
-                channels,
-                split_ratio,
-                grid_aware=grid_aware,
-                split_input=False,
-                split_factor=0.5)
-        for module in sinks:
-            _split_channels(
-                module,
-                channels,
-                split_ratio,
-                grid_aware=grid_aware,
-                split_input=False,
-                split_factor=1)
+        # what if we split input channels of the sinks, which channels of the OC srcs have to duplicated?
+        pass
 
 
 def _is_supported(srcs: List[nn.Module], sinks: List[nn.Module]) -> bool:
@@ -172,17 +164,17 @@ def _split(
 
             # get channels to split
             if split_input:
-                channels = _channels_to_split(sinks, split_criterion, split_ratio, True)
+                # we will have
+                mod_to_channels = _channels_to_split(
+                    sinks, split_criterion, split_ratio, split_input)
             else:
-                channels = _channels_to_split(srcs, split_criterion, split_ratio, False)
+                mod_to_channels = _channels_to_split(srcs, split_criterion, split_ratio, False)
+                _split_channels_region(
+                    module_to_split=mod_to_channels,
+                    modules_to_duplicate=sinks,
+                    split_input=split_input)
 
-            # split channels across regions
-            _split_channels_region(
-                srcs=srcs,
-                sinks=sinks,
-                channels=channels,
-                split_ratio=split_ratio,
-                grid_aware=grid_aware)
+            # now splits those channels that we just selected!
 
     return model
 
