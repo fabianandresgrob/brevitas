@@ -26,6 +26,7 @@ from brevitas.graph.standardize import RemoveStochasticModules
 from brevitas.graph.standardize import TorchFunctionalToModule
 from brevitas.nn import quant_layer
 import brevitas.nn as qnn
+from brevitas.ptq_algorithms.channel_splitting import ChannelSplitting
 from brevitas.quant import Int8ActPerTensorFloat
 from brevitas.quant import Int8ActPerTensorFloatMinMaxInit
 from brevitas.quant import Int8WeightPerTensorFloat
@@ -263,7 +264,10 @@ def preprocess_for_quantize(
         equalize_merge_bias=True,
         merge_bn=True,
         equalize_bias_shrinkage: str = 'vaiq',
-        equalize_scale_computation: str = 'maxabs'):
+        equalize_scale_computation: str = 'maxabs',
+        channel_splitting=False,
+        channel_splitting_ratio=0.02,
+        channel_splitting_criterion: str = 'maxabs'):
 
     training_state = model.training
     model.eval()
@@ -285,6 +289,10 @@ def preprocess_for_quantize(
         merge_bias=equalize_merge_bias,
         bias_shrinkage=equalize_bias_shrinkage,
         scale_computation_type=equalize_scale_computation).apply(model)
+    if channel_splitting:
+        model = ChannelSplitting(
+            split_ratio=channel_splitting_ratio,
+            split_criterion=channel_splitting_criterion).apply(model)
     model.train(training_state)
     return model
 
