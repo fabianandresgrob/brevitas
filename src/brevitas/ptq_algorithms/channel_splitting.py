@@ -110,6 +110,8 @@ def _split_channels(
             var = running_var[id:id + 1] * split_factor
             running_var = torch.cat((running_var[:id], var, var, running_var[id + 1:]))
 
+            module.num_features += 1
+
         if bias is not None and not split_input:
             channel = bias[id:id + 1] * split_factor
             bias = torch.cat((bias[:id], channel, channel, bias[id + 1:]))
@@ -133,14 +135,14 @@ def _split_channels_region(
     # splitting output channels
     # concat all channels that are split so we can duplicate those in the input channels later
     if not split_input:
-        for module, channels in modules_to_split.items():
+        channels = torch.cat(list(modules_to_split.values()))
+        for module in modules_to_split.keys():
             _split_channels(module, channels, grid_aware=grid_aware)
         # get all the channels that we have to duplicate
-        channels_to_duplicate = torch.cat(list(modules_to_split.values()))
+        channels = torch.cat(list(modules_to_split.values()))
         for module in sinks:
             # then duplicate the input_channels for all modules in the sink
-            _split_channels(
-                module, channels_to_duplicate, grid_aware=False, split_factor=1, split_input=True)
+            _split_channels(module, channels, grid_aware=False, split_factor=1, split_input=True)
     else:
         # what if we split input channels of the sinks, which channels of the OC srcs have to duplicated?
         for module, channels in modules_to_split.items():
@@ -159,7 +161,7 @@ def _is_supported(srcs: List[nn.Module], sinks: List[nn.Module]) -> bool:
     if len(srcs_ocs) > 1:
         return False
 
-    # check if ICs of sinks are all equal
+    # check if ICs of sinks are all equal, what if sinks does not have IC?
     sinks_ics = set(module.weight.shape[1] for module in sinks)
     if len(sinks_ics) > 1:
         return False

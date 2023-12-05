@@ -2,7 +2,7 @@ import torch
 from torchvision import models
 
 from brevitas.fx import symbolic_trace
-from brevitas.graph.equalize import _extract_regions
+from brevitas.graph.fixed_point import MergeBatchNorm
 from brevitas.ptq_algorithms.channel_splitting import *
 
 from .equalization_fixtures import *
@@ -17,6 +17,9 @@ def test_resnet18():
     model.eval()
     expected_out = model(inp)
     model = symbolic_trace(model)
+
+    # merge BN before applying channel splitting
+    model = MergeBatchNorm().apply(model)
 
     model = ChannelSplitting(split_ratio=0.1).apply(model)
     out = model(inp)
