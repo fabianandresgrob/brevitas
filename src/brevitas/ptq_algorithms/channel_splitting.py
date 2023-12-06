@@ -1,5 +1,6 @@
 import math
 from typing import Dict, List, Set, Tuple, Union
+import warnings
 
 import torch
 import torch.nn as nn
@@ -7,8 +8,6 @@ import torch.nn as nn
 from brevitas.fx import GraphModule
 from brevitas.graph.base import GraphTransform
 from brevitas.graph.equalize import _extract_regions
-
-_batch_norm = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 
 
 def _channels_maxabs(module, splits_per_layer, split_input):
@@ -44,15 +43,31 @@ def _channels_to_split(
     else:
         # if we split input channels, each module has to split the whole budget
         splits_per_layer = total_splits
-    assert splits_per_layer > 0, f"No channels to split in {modules} with split_rati {split_ratio}!"
+
+    if splits_per_layer == 0:
+        warnings.warn(f'No splits for {sources}, increasing split_ratio could help.')
 
     module_to_channels = {}
     if split_criterion == 'maxabs':
         for module in modules:
             module_to_channels[module] = _channels_maxabs(module, splits_per_layer, split_input)
 
-    # return dict with modules as key and channels to split as value
-    return module_to_channels
+    # return tensor with the indices to split
+    channels_to_split = torch.cat(list(module_to_channels.values()))
+    return torch.unique(channels_to_split)
+
+
+def _split_single_channel(channel, grid_aware: bool, split_factor: float):
+    if split_factor == 1:
+        # duplicates the channel
+        return channel, channel
+
+    if grid_aware:
+        slice1 = channel - 0.5
+        slice2 = channel + 0.5
+        return slice1 * split_factor, slice2 * split_factor
+    else:
+        return channel * split_factor, channel * split_factor
 
 
 def _split_channels(
@@ -63,96 +78,70 @@ def _split_channels(
     Can also be used to duplicate a channel, just set split_factor to 1.
     Returns: None
     """
-    # change it to .data attribute
     weight = module.weight.data
     bias = module.bias.data if module.bias is not None else None
-    if isinstance(module, _batch_norm):
-        running_mean = module.running_mean.data
-        running_var = module.running_var.data
 
     for id in channels_to_split:
         if isinstance(module, torch.nn.Conv2d):
             # there are four dimensions: [OC, IC, k, k]
             if split_input:
-                channel = weight[:, id:id + 1, :, :] * split_factor
-                weight = torch.cat(
-                    (weight[:, :id, :, :], channel, channel, weight[:, id + 1:, :, :]), dim=1)
+                channel = weight[:, id:id + 1, :, :]
+                slice1, slice2 = _split_single_channel(channel, grid_aware, split_factor)
+                weight = torch.cat((weight[:, :id, :, :], slice1, slice2, weight[:, id + 1:, :, :]),
+                                   dim=1)
                 module.in_channels += 1
             else:
-                # split output
-                channel = weight[id:id + 1, :, :, :] * split_factor
-                # duplicate channel
-                weight = torch.cat(
-                    (weight[:id, :, :, :], channel, channel, weight[id + 1:, :, :, :]), dim=0)
+                channel = weight[id:id + 1, :, :, :]
+                slice1, slice2 = _split_single_channel(channel, grid_aware, split_factor)
+                weight = torch.cat((weight[:id, :, :, :], slice1, slice2, weight[id + 1:, :, :, :]),
+                                   dim=0)
                 module.out_channels += 1
 
         elif isinstance(module, torch.nn.Linear):
             # there are two dimensions: [OC, IC]
             if split_input:
-                # simply duplicate channel
-                channel = weight[:, id:id + 1] * split_factor
-                weight = torch.cat((weight[:, :id], channel, channel, weight[:, id + 1:]), dim=1)
+                channel = weight[:, id:id + 1]
+                slice1, slice2 = _split_single_channel(channel, grid_aware, split_factor)
+                weight = torch.cat((weight[:, :id], slice1, slice2, weight[:, id + 1:]), dim=1)
                 module.in_features += 1
             else:
-                # split output
-                channel = weight[id:id + 1, :] * split_factor
-                weight = torch.cat((weight[:id, :], channel, channel, weight[id + 1:, :]), dim=0)
+                channel = weight[id:id + 1, :]
+                slice1, slice2 = _split_single_channel(channel, grid_aware, split_factor)
+                weight = torch.cat((weight[:id, :], slice1, slice2, weight[id + 1:, :]), dim=0)
                 module.out_features += 1
-
-        elif isinstance(module, _batch_norm):
-            # bach norm is 1d
-            channel = weight[id:id + 1] * split_factor
-            weight = torch.cat((weight[:id], channel, channel, weight[id + 1:]))
-            # also split running_mean and running_var
-            mean = running_mean[id:id + 1] * split_factor
-            running_mean = torch.cat((running_mean[:id], mean, mean, running_mean[id + 1:]))
-
-            var = running_var[id:id + 1] * split_factor
-            running_var = torch.cat((running_var[:id], var, var, running_var[id + 1:]))
-
-            module.num_features += 1
 
         if bias is not None and not split_input:
             channel = bias[id:id + 1] * split_factor
             bias = torch.cat((bias[:id], channel, channel, bias[id + 1:]))
 
-    # setting the weights as the new data
     module.weight.data = weight
     if bias is not None:
         module.bias.data = bias
-    if isinstance(module, _batch_norm):
-        module.running_mean.data = running_mean
-        module.running_var.data = running_var
 
 
 def _split_channels_region(
         sources: List[nn.Module],
         sinks: List[nn.Module],
-        modules_to_split: Dict[nn.Module, torch.tensor],
+        channels_to_split: torch.tensor,
         split_input: bool,
         grid_aware: bool = False):
-    # we are getting a dict[Module, channels to split]
     # splitting output channels
     # concat all channels that are split so we can duplicate those in the input channels later
     if not split_input:
-        channels = torch.cat(list(modules_to_split.values()))
-        for module in modules_to_split.keys():
-            _split_channels(module, channels, grid_aware=grid_aware)
-        # get all the channels that we have to duplicate
-        channels = torch.cat(list(modules_to_split.values()))
+        for module in sources:
+            _split_channels(module, channels_to_split, grid_aware=grid_aware)
         for module in sinks:
             # then duplicate the input_channels for all modules in the sink
-            _split_channels(module, channels, grid_aware=False, split_factor=1, split_input=True)
+            _split_channels(
+                module, channels_to_split, grid_aware=False, split_factor=1, split_input=True)
     else:
         # what if we split input channels of the sinks, which channels of the OC srcs have to duplicated?
-        for module, channels in modules_to_split.items():
-            _split_channels(module, channels, grid_aware=grid_aware)
+        for module in sources:
+            _split_channels(module, channels_to_split, grid_aware=grid_aware)
         # TODO duplicating the channels in the output channels of the sources could be tricky
-        channels_to_duplicate = torch.cat(list(modules_to_split.values()))
         for module in sources:
             # then duplicate the input_channels for all modules in the sink
-            _split_channels(
-                module, channels_to_duplicate, grid_aware=False, split_factor=1, split_input=False)
+            _split_channels(module, channels_to_split)
 
 
 def _is_supported(srcs: List[nn.Module], sinks: List[nn.Module]) -> bool:
@@ -195,9 +184,8 @@ def _split(
         sinks = [name_to_module[n] for n in region.sinks]
 
         if _is_supported(sources, sinks):
-            # problem: if region[0] has bn modules as sources, we split them but the input from prev layer is not the correct shape anymore! So we need to skip the first region in case that happens
             # get channels to split
-            modules_to_split = _channels_to_split(
+            channels_to_split = _channels_to_split(
                 sources=sources,
                 sinks=sinks,
                 split_criterion=split_criterion,
@@ -207,7 +195,8 @@ def _split(
             _split_channels_region(
                 sources=sources,
                 sinks=sinks,
-                modules_to_split=modules_to_split,
+                channels_to_split=channels_to_split,
+                grid_aware=grid_aware,
                 split_input=split_input)
 
     return model

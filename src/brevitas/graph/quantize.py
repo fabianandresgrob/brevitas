@@ -267,6 +267,7 @@ def preprocess_for_quantize(
         equalize_scale_computation: str = 'maxabs',
         channel_splitting=False,
         channel_splitting_ratio=0.02,
+        channel_splitting_grid_aware=False,
         channel_splitting_criterion: str = 'maxabs'):
 
     training_state = model.training
@@ -292,6 +293,7 @@ def preprocess_for_quantize(
     if channel_splitting:
         model = ChannelSplitting(
             split_ratio=channel_splitting_ratio,
+            grid_aware=channel_splitting_grid_aware,
             split_criterion=channel_splitting_criterion).apply(model)
     model.train(training_state)
     return model
