@@ -235,6 +235,8 @@ add_bool_arg(
     'channel-splitting',
     default=False,
     help='Apply Channel Splitting before Quantization (default: disabled)')
+add_bool_arg(
+    parser, 'grid-aware', default=False, help='Grid-aware channel splitting (default: disabled)')
 
 
 def main():
@@ -301,7 +303,9 @@ def main():
         f"Weight quant calibration type: {args.weight_quant_calibration_type} - "
         f"Calibrate BN: {args.calibrate_bn} - "
         f"Channel Splitting: {args.channel_splitting} - "
-        f"Split Ratio: {args.split_ratio} - ")
+        f"Split Ratio: {args.split_ratio} - "
+        f"Grid Aware: {args.grid_aware} - "
+        f"Merge BN: {not args.calibrate_bn}")
 
     # Get model-specific configurations about input shapes and normalization
     model_config = get_model_config(args.model_name)
@@ -347,6 +351,7 @@ def main():
             equalize_merge_bias=args.graph_eq_merge_bias,
             merge_bn=not args.calibrate_bn,
             channel_splitting=args.channel_splitting,
+            channel_splitting_grid_aware=args.grid_aware,
             channel_splitting_ratio=args.split_ratio)
     else:
         raise RuntimeError(f"{args.target_backend} backend not supported.")

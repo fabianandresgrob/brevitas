@@ -8,7 +8,8 @@ from brevitas.ptq_algorithms.channel_splitting import *
 from .equalization_fixtures import *
 
 
-def test_resnet18():
+@pytest.mark.parametrize('split_ratio', [0.05, 0.1, 0.2])
+def test_resnet18(split_ratio):
     model = models.resnet18(pretrained=True)
 
     torch.manual_seed(SEED)
@@ -21,12 +22,13 @@ def test_resnet18():
     # merge BN before applying channel splitting
     model = MergeBatchNorm().apply(model)
 
-    model = ChannelSplitting(split_ratio=0.1).apply(model)
+    model = ChannelSplitting(split_ratio=split_ratio).apply(model)
     out = model(inp)
     assert torch.allclose(expected_out, out, atol=ATOL)
 
 
-def test_alexnet():
+@pytest.mark.parametrize('split_ratio', [0.05, 0.1])
+def test_alexnet(split_ratio):
     model = models.alexnet(pretrained=True)
 
     torch.manual_seed(SEED)
@@ -37,6 +39,6 @@ def test_alexnet():
     model = symbolic_trace(model)
 
     # set split_ratio to 0.2 to def have some splits
-    model = ChannelSplitting(split_ratio=0.2).apply(model)
+    model = ChannelSplitting(split_ratio=split_ratio).apply(model)
     out = model(inp)
     assert torch.allclose(expected_out, out, atol=ATOL)
