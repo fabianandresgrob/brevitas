@@ -332,10 +332,10 @@ def validate_config(config_namespace):
     if (config_namespace.target_backend == 'fx' or config_namespace.target_backend
             == 'layerwise') and config_namespace.bias_bit_width == 16:
         is_valid = False
-    # Only one of GPTQ, GPFQ, or GPA2Q can be enabled
+    # Only one of GPTQ, GPFQ, or GPA2Q can be enabled, or None
     multiple_gpxqs = float(config_namespace.gpfq) + float(config_namespace.gptq) + float(
         config_namespace.gpfa2q)
-    if multiple_gpxqs != 1:
+    if multiple_gpxqs > 1:
         is_valid = False
 
     if config_namespace.act_equalization == 'layerwise' and config_namespace.target_backend == 'fx':
@@ -367,6 +367,12 @@ def validate_config(config_namespace):
             is_valid = False
         if config_namespace.act_exponent_bit_width + config_namespace.act_mantissa_bit_width != config_namespace.act_bit_width - 1:
             is_valid = False
+
+    # filter out unvalid channel_splitting configurations
+    if not config_namespace.channel_splitting:
+        # we don't need split ratio or grid_aware
+        config_namespace.split_ratio = None
+        config_namespace.grid_aware = None
 
     config_namespace.is_valid = is_valid
     return config_namespace
