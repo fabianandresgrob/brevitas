@@ -237,6 +237,11 @@ add_bool_arg(
     help='Apply Channel Splitting before Quantization (default: disabled)')
 add_bool_arg(
     parser, 'grid-aware', default=False, help='Grid-aware channel splitting (default: disabled)')
+add_bool_arg(
+    parser,
+    'split-input',
+    default=False,
+    help='Input Channels Splitting for channel splitting (default: disabled)')
 
 
 def main():

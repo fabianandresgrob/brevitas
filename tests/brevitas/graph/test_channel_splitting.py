@@ -9,7 +9,8 @@ from .equalization_fixtures import *
 
 
 @pytest.mark.parametrize('split_ratio', [0.05, 0.1, 0.2])
-def test_resnet18(split_ratio):
+@pytest.mark.parametrize('split_input', [False, True])
+def test_resnet18(split_ratio, split_input):
     model = models.resnet18(pretrained=True)
 
     torch.manual_seed(SEED)
@@ -22,13 +23,14 @@ def test_resnet18(split_ratio):
     # merge BN before applying channel splitting
     model = MergeBatchNorm().apply(model)
 
-    model = ChannelSplitting(split_ratio=split_ratio).apply(model)
+    model = ChannelSplitting(split_ratio=split_ratio, split_input=split_input).apply(model)
     out = model(inp)
     assert torch.allclose(expected_out, out, atol=ATOL)
 
 
 @pytest.mark.parametrize('split_ratio', [0.05, 0.1])
-def test_alexnet(split_ratio):
+@pytest.mark.parametrize('split_input', [False, True])
+def test_alexnet(split_ratio, split_input):
     model = models.alexnet(pretrained=True)
 
     torch.manual_seed(SEED)
@@ -39,6 +41,6 @@ def test_alexnet(split_ratio):
     model = symbolic_trace(model)
 
     # set split_ratio to 0.2 to def have some splits
-    model = ChannelSplitting(split_ratio=split_ratio).apply(model)
+    model = ChannelSplitting(split_ratio=split_ratio, split_input=split_input).apply(model)
     out = model(inp)
     assert torch.allclose(expected_out, out, atol=ATOL)
