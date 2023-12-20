@@ -256,6 +256,9 @@ def main():
     else:
         act_quant_calib_config = args.act_quant_calibration_type
 
+    if args.act_bit_width == 0:
+        args.act_bit_width = None
+
     config = (
         f"{args.model_name}_"
         f"{args.target_backend}_"
@@ -357,7 +360,8 @@ def main():
             merge_bn=not args.calibrate_bn,
             channel_splitting=args.channel_splitting,
             channel_splitting_grid_aware=args.grid_aware,
-            channel_splitting_ratio=args.split_ratio)
+            channel_splitting_ratio=args.split_ratio,
+            channel_splitting_weight_bit_width=args.weight_bit_width)
     else:
         raise RuntimeError(f"{args.target_backend} backend not supported.")
 
@@ -425,9 +429,9 @@ def main():
             iters=args.learned_round_iters,
             optimizer_lr=args.learned_round_lr)
 
-    if args.calibrate_bn:
-        print("Calibrate BN:")
-        calibrate_bn(calib_loader, quant_model)
+    # if args.calibrate_bn:
+    #     print("Calibrate BN:")
+    #     calibrate_bn(calib_loader, quant_model)
 
     if args.bias_corr:
         print("Applying bias correction:")

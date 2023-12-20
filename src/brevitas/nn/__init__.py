@@ -32,4 +32,5 @@ from .quant_scale_bias import ScaleBias
 from .quant_upsample import QuantUpsample
 from .quant_upsample import QuantUpsamplingBilinear2d
 from .quant_upsample import QuantUpsamplingNearest2d
+from .split_layer import ChannelSplitModule
 from .target import flexml
