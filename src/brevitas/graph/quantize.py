@@ -268,6 +268,7 @@ def preprocess_for_quantize(
         channel_splitting=False,
         channel_splitting_ratio=0.02,
         channel_splitting_grid_aware=False,
+        channel_splitting_split_iteratively=False,
         channel_splitting_criterion: str = 'maxabs',
         channel_splitting_weight_bit_width: int = 8):
 
@@ -296,6 +297,7 @@ def preprocess_for_quantize(
             split_ratio=channel_splitting_ratio,
             grid_aware=channel_splitting_grid_aware,
             split_criterion=channel_splitting_criterion,
+            split_iteratively=channel_splitting_split_iteratively,
             weight_bit_width=channel_splitting_weight_bit_width).apply(model)
     model.train(training_state)
     return model

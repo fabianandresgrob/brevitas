@@ -242,6 +242,13 @@ add_bool_arg(
     'split-input',
     default=False,
     help='Input Channels Splitting for channel splitting (default: disabled)')
+add_bool_arg(
+    parser,
+    'split-iteratively',
+    default=False,
+    help=
+    'Input Channels are split iteratively, allows the same channel to be split multiple times (default: disabled)'
+)
 
 
 def main():
@@ -313,6 +320,7 @@ def main():
         f"Channel Splitting: {args.channel_splitting} - "
         f"Split Ratio: {args.split_ratio} - "
         f"Grid Aware: {args.grid_aware} - "
+        f"Split Iteratively: {args.split_iteratively} - "
         f"Merge BN: {not args.calibrate_bn}")
 
     # Get model-specific configurations about input shapes and normalization
@@ -360,6 +368,7 @@ def main():
             merge_bn=not args.calibrate_bn,
             channel_splitting=args.channel_splitting,
             channel_splitting_grid_aware=args.grid_aware,
+            channel_splitting_split_iteratively=args.split_iteratively,
             channel_splitting_ratio=args.split_ratio,
             channel_splitting_weight_bit_width=args.weight_bit_width)
     else:

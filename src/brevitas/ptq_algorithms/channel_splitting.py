@@ -392,13 +392,19 @@ def split_channels_iteratively(module, split_ratio, grid_aware, bit_width):
 class LayerwiseChannelSplitting(GraphTransform):
 
     def __init__(
-            self, split_ratio=0.02, split_criterion='maxabs', grid_aware=False, weight_bit_width=8):
+            self,
+            split_ratio=0.02,
+            split_criterion='maxabs',
+            grid_aware=False,
+            split_iteratively=False,
+            weight_bit_width=8):
         super(LayerwiseChannelSplitting, self).__init__()
 
         self.grid_aware = grid_aware
         self.split_ratio = split_ratio
         self.split_criterion = split_criterion
         self.weight_bit_width = weight_bit_width
+        self.split_iteratively = split_iteratively
 
     def _is_supported_module(self, graph_model: GraphModule, node: Node) -> bool:
         if node.op == 'call_module':
@@ -413,16 +419,26 @@ class LayerwiseChannelSplitting(GraphTransform):
         for node in graph_model.graph.nodes:
             if self._is_supported_module(graph_model, node):
                 module = get_module(graph_model, node.target)
-                # we only split input channels
-                # channels_to_split = _channels_to_split({}, {node.target: module}, split_ratio=self.split_ratio, split_input=True, split_criterion=self.split_criterion)
-                # split the channels in the module
-                # _split_channels(module, channels_to_split, grid_aware=self.grid_aware, split_input=True, bit_width=self.weight_bit_width)
+                if self.split_iteratively:
+                    channels_to_split = split_channels_iteratively(
+                        module,
+                        split_ratio=self.split_ratio,
+                        grid_aware=self.grid_aware,
+                        bit_width=self.weight_bit_width)
+                else:
+                    # we only split input channels
+                    channels_to_split = _channels_to_split({}, {node.target: module},
+                                                           split_ratio=self.split_ratio,
+                                                           split_input=True,
+                                                           split_criterion=self.split_criterion)
+                    # split the channels in the module
+                    _split_channels(
+                        module,
+                        channels_to_split,
+                        grid_aware=self.grid_aware,
+                        split_input=True,
+                        bit_width=self.weight_bit_width)
                 # add node to split modules
-                channels_to_split = split_channels_iteratively(
-                    module,
-                    split_ratio=self.split_ratio,
-                    grid_aware=self.grid_aware,
-                    bit_width=self.weight_bit_width)
                 split_modules[module] = torch.tensor(channels_to_split)
 
         for module, channels_to_split in split_modules.items():
