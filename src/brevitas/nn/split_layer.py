@@ -2,7 +2,7 @@ from inspect import signature
 
 import torch
 
-INPUT_NAMES = ['input', 'inp', 'query', 'x']
+INPUT_NAMES = ['input', 'inp', 'query', 'x', 'args']
 
 
 class ChannelSplitModule(torch.nn.Module):
@@ -22,6 +22,9 @@ class ChannelSplitModule(torch.nn.Module):
         possible_input_kwargs = INPUT_NAMES
         input_kwarg = [x for x in kwargs.keys() if x in possible_input_kwargs][0]
         x = kwargs[input_kwarg]
+        if input_kwarg == 'args':
+            x = x[0]
+            kwargs = {'args': x}
         out = x
 
         self.channels_to_duplicate = self.channels_to_duplicate.to(out.device)

@@ -249,6 +249,20 @@ add_bool_arg(
     help=
     'Input Channels are split iteratively, allows the same channel to be split multiple times (default: disabled)'
 )
+add_bool_arg(
+    parser,
+    'split-layerwise',
+    default=False,
+    help=
+    'Input Channels are split layerwise, not regionwise (default: disabled)'
+)
+add_bool_arg(
+    parser,
+    'merge-bn',
+    default=True,
+    help=
+    'Merge Batch Normalization layers (default: enabled)'
+)
 
 
 def main():
@@ -365,8 +379,9 @@ def main():
             model,
             equalize_iters=args.graph_eq_iterations,
             equalize_merge_bias=args.graph_eq_merge_bias,
-            merge_bn=not args.calibrate_bn,
+            merge_bn=args.merge_bn,
             channel_splitting=args.channel_splitting,
+            channel_splitting_layerwise=args.split_layerwise,
             channel_splitting_grid_aware=args.grid_aware,
             channel_splitting_split_iteratively=args.split_iteratively,
             channel_splitting_ratio=args.split_ratio,
@@ -438,9 +453,9 @@ def main():
             iters=args.learned_round_iters,
             optimizer_lr=args.learned_round_lr)
 
-    # if args.calibrate_bn:
-    #     print("Calibrate BN:")
-    #     calibrate_bn(calib_loader, quant_model)
+    if args.calibrate_bn:
+        print("Calibrate BN:")
+        calibrate_bn(calib_loader, quant_model)
 
     if args.bias_corr:
         print("Applying bias correction:")

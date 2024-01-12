@@ -72,7 +72,10 @@ def unique(sequence):
 TORCHVISION_TOP1_MAP = {
     'resnet18': 69.758,
     'mobilenet_v2': 71.898,
-    'vit_b_32': 75.912,}
+    'vit_b_32': 75.912,
+    'inception_v3': 78.8,
+    'resnet50': 76.1, 
+    }
 
 OPTIONS_DEFAULT = {
     'model_name': list(TORCHVISION_TOP1_MAP.keys()),
@@ -105,6 +108,13 @@ OPTIONS_DEFAULT = {
     'accumulator_bit_width': [16],  # Accumulator bit width, only in combination with GPFA2Q
     'act_quant_percentile': [99.999],  # Activation Quantization Percentile
     'uint_sym_act_for_unsigned_values': [True],  # Whether to use unsigned act quant when possible
+    'channel_splitting': [False],
+    'split_ratio': [0.01],
+    'split_iteratively': [True],
+    'split_layerwise': [False],
+    'split_input': [True],
+    'grid_aware': [True],
+    'merge_bn': [True],
 }
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet PTQ Validation')
@@ -210,7 +220,15 @@ def ptq_torchvision_models(args):
         model = preprocess_for_quantize(
             model,
             equalize_iters=config_namespace.graph_eq_iterations,
-            equalize_merge_bias=config_namespace.graph_eq_merge_bias)
+            equalize_merge_bias=config_namespace.graph_eq_merge_bias,
+            merge_bn=config_namespace.merge_bn,
+            channel_splitting=config_namespace.channel_splitting,
+            channel_splitting_layerwise=config_namespace.split_layerwise,
+            channel_splitting_split_input=config_namespace.split_input,
+            channel_splitting_grid_aware=config_namespace.grid_aware,
+            channel_splitting_ratio=config_namespace.split_ratio,
+            channel_splitting_split_iteratively=config_namespace.split_iteratively,
+            channel_splitting_weight_bit_width=config_namespace.weight_bit_width)
     else:
         raise RuntimeError(f"{config_namespace.target_backend} backend not supported.")
 
@@ -266,7 +284,7 @@ def ptq_torchvision_models(args):
             quant_model,
             p=config_namespace.gpfq_p,
             act_order=config_namespace.gpxq_act_order,
-            gpfa2q=config_namespace.gpfa2q,
+            use_gpfa2q=config_namespace.gpfa2q,
             accumulator_bit_width=config_namespace.accumulator_bit_width)
 
     if config_namespace.gptq:
@@ -334,6 +352,9 @@ def validate_config(config_namespace):
         config_namespace.gpfa2q)
     if multiple_gpxqs > 1:
         is_valid = False
+    elif multiple_gpxqs == 0:
+        # no gpxq algorithm, set act order to None
+        config_namespace.gpxq_act_order = None
 
     if config_namespace.act_equalization == 'layerwise' and config_namespace.target_backend == 'fx':
         is_valid = False
@@ -364,6 +385,18 @@ def validate_config(config_namespace):
             is_valid = False
         if config_namespace.act_exponent_bit_width + config_namespace.act_mantissa_bit_width != config_namespace.act_bit_width - 1:
             is_valid = False
+    # if channel splitting is false, no need for split ratio, grid aware, or iteratively split
+    if not config_namespace.channel_splitting:
+        config_namespace.split_iteratively = None
+        config_namespace.split_ratio = None
+        config_namespace.grid_aware = None
+        config_namespace.split_layerwise = None
+        config_namespace.split_input = None
+    else:
+        if not config_namespace.split_layerwise:
+            config_namespace.split_iteratively = None
+        else:
+            config_namespace.split_input = None
 
     config_namespace.is_valid = is_valid
     return config_namespace

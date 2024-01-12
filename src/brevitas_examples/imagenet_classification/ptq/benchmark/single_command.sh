@@ -1,27 +1,34 @@
-python ptq_benchmark_torchvision.py $1 --calibration-dir /scratch/datasets/imagenet_symlink/calibration --validation-dir /scratch/datasets/imagenet_symlink/val \
---quant_format float \
+python ptq_benchmark_torchvision.py $1 --calibration-dir /scratch/fabian/datasets/imagenet/calibration --validation-dir /scratch/fabian/datasets/imagenet/val \
+--model_name resnet18 \
+--quant_format int \
 --scale_factor_type float_scale \
---weight_bit_width 2 3 4 5 6 7 8 \
---act_bit_width 2 3 4 5 6 7 8 \
+--weight_bit_width 4 \
+--act_bit_width 4 \
 --weight_mantissa_bit_width 1 2 3 4 5 6 \
 --weight_exponent_bit_width 1 2 3 4 5 6 \
 --act_mantissa_bit_width 1 2 3 4 5 6 \
 --act_exponent_bit_width 1 2 3 4 5 6 \
 --bias_bit_width None \
---weight_quant_granularity per_channel per_tensor \
---act_quant_type sym \
+--weight_quant_granularity per_channel \
+--act_quant_type asym \
 --weight_param_method stats \
 --act_param_method mse \
---bias_corr True \
+--bias_corr False \
 --graph_eq_iterations 20 \
---graph_eq_merge_bias True \
+--graph_eq_merge_bias False \
 --act_equalization layerwise \
 --learned_round False \
---gptq False \
---gpxq_act_order False \
---gpfq False \
---gpfq_p None \
+--gptq True False \
+--gpxq_act_order True False \
+--gpfq True False \
 --gpfa2q False \
 --accumulator_bit_width None \
 --uint_sym_act_for_unsigned_values False \
 --act_quant_percentile None \
+--channel_splitting True False \
+--split_ratio 0.05 0.1 \
+--grid_aware True False \
+--split_iteratively True False \
+--split_input True False \
+--split_layerwise True False \
+--merge_bn True

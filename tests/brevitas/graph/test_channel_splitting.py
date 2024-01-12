@@ -8,7 +8,6 @@ from brevitas.ptq_algorithms.channel_splitting import *
 from .equalization_fixtures import *
 
 
-@pytest.mark.skip()
 @pytest.mark.parametrize('split_ratio', [0.05, 0.1, 0.2])
 @pytest.mark.parametrize('split_input', [False, True])
 def test_resnet18(split_ratio, split_input):
@@ -30,7 +29,6 @@ def test_resnet18(split_ratio, split_input):
     assert torch.allclose(expected_out, out, atol=ATOL)
 
 
-@pytest.mark.skip()
 @pytest.mark.parametrize('split_ratio', [0.05, 0.1])
 @pytest.mark.parametrize('split_input', [False, True])
 def test_alexnet(split_ratio, split_input):

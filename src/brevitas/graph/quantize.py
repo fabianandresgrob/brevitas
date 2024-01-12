@@ -26,7 +26,7 @@ from brevitas.graph.standardize import RemoveStochasticModules
 from brevitas.graph.standardize import TorchFunctionalToModule
 from brevitas.nn import quant_layer
 import brevitas.nn as qnn
-from brevitas.ptq_algorithms.channel_splitting import LayerwiseChannelSplitting
+from brevitas.ptq_algorithms.channel_splitting import LayerwiseChannelSplitting, RegionwiseChannelSplitting
 from brevitas.quant import Int8ActPerTensorFloat
 from brevitas.quant import Int8ActPerTensorFloatMinMaxInit
 from brevitas.quant import Int8WeightPerTensorFloat
@@ -266,6 +266,8 @@ def preprocess_for_quantize(
         equalize_bias_shrinkage: str = 'vaiq',
         equalize_scale_computation: str = 'maxabs',
         channel_splitting=False,
+        channel_splitting_layerwise=False,
+        channel_splitting_split_input=True,
         channel_splitting_ratio=0.02,
         channel_splitting_grid_aware=False,
         channel_splitting_split_iteratively=False,
@@ -277,28 +279,35 @@ def preprocess_for_quantize(
 
     if trace_model:
         model = symbolic_trace(model)
-    # model = TorchFunctionalToModule().apply(model)
-    # model = DuplicateSharedStatelessModule().apply(model)
+    model = TorchFunctionalToModule().apply(model)
+    model = DuplicateSharedStatelessModule().apply(model)
     if relu6_to_relu:
         model = ModuleToModuleByClass(nn.ReLU6, nn.ReLU).apply(model)
-    # model = MeanMethodToAdaptiveAvgPool2d().apply(model)
-    # model = CollapseConsecutiveConcats().apply(model)
-    # model = MoveSplitBatchNormBeforeCat().apply(model)
+    model = MeanMethodToAdaptiveAvgPool2d().apply(model)
+    model = CollapseConsecutiveConcats().apply(model)
+    model = MoveSplitBatchNormBeforeCat().apply(model)
     if merge_bn:
         model = MergeBatchNorm().apply(model)
-    # model = RemoveStochasticModules().apply(model)
-    # model = EqualizeGraph(
-    #     iterations=equalize_iters,
-    #     merge_bias=equalize_merge_bias,
-    #     bias_shrinkage=equalize_bias_shrinkage,
-    #     scale_computation_type=equalize_scale_computation).apply(model)
+    model = RemoveStochasticModules().apply(model)
+    model = EqualizeGraph(
+        iterations=equalize_iters,
+        merge_bias=equalize_merge_bias,
+        bias_shrinkage=equalize_bias_shrinkage,
+        scale_computation_type=equalize_scale_computation).apply(model)
     if channel_splitting:
-        model = LayerwiseChannelSplitting(
-            split_ratio=channel_splitting_ratio,
-            grid_aware=channel_splitting_grid_aware,
-            split_criterion=channel_splitting_criterion,
-            split_iteratively=channel_splitting_split_iteratively,
-            weight_bit_width=channel_splitting_weight_bit_width).apply(model)
+        if not channel_splitting_layerwise:
+            model = RegionwiseChannelSplitting(
+                split_ratio=channel_splitting_ratio,
+                split_input=channel_splitting_split_input,
+                grid_aware=channel_splitting_grid_aware,
+                weight_bit_width=channel_splitting_weight_bit_width).apply(model)
+        else:
+            model = LayerwiseChannelSplitting(
+                split_ratio=channel_splitting_ratio,
+                grid_aware=channel_splitting_grid_aware,
+                split_criterion=channel_splitting_criterion,
+                split_iteratively=channel_splitting_split_iteratively,
+                weight_bit_width=channel_splitting_weight_bit_width).apply(model)
     model.train(training_state)
     return model
 

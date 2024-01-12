@@ -11,8 +11,10 @@ from brevitas.graph.base import GraphTransform
 from brevitas.graph.base import ModuleInstanceToModuleInstance
 from brevitas.graph.equalize import _extract_regions
 from brevitas.graph.utils import get_module
-from brevitas.nn import ChannelSplitModule
+from brevitas.nn.split_layer import ChannelSplitModule
 
+
+__all__ = ['RegionwiseChannelSplitting', 'LayerwiseChannelSplitting']
 
 def _calculate_scale(weights, bit_width, clip_threshold=1.):
     max_abs = weights.abs().max()
@@ -221,9 +223,9 @@ def _split(
     name_to_module: Dict[str, nn.Module] = {}
     name_set = set()
     for region in regions:
-        for name in region.srcs:
+        for name in region.srcs_names:
             name_set.add(name)
-        for name in region.sinks:
+        for name in region.sinks_names:
             name_set.add(name)
 
     for name, module in model.named_modules():
@@ -233,8 +235,8 @@ def _split(
     for i, region in enumerate(regions):
 
         # check if region is suitable for channel splitting
-        sources = {n: name_to_module[n] for n in region.srcs}
-        sinks = {n: name_to_module[n] for n in region.sinks}
+        sources = {n: name_to_module[n] for n in region.srcs_names}
+        sinks = {n: name_to_module[n] for n in region.sinks_names}
 
         if _is_supported(sources.values(), sinks.values()):
             # get channels to split
