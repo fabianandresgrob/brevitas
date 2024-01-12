@@ -13,8 +13,8 @@ from brevitas.graph.equalize import _extract_regions
 from brevitas.graph.utils import get_module
 from brevitas.nn.split_layer import ChannelSplitModule
 
-
 __all__ = ['RegionwiseChannelSplitting', 'LayerwiseChannelSplitting']
+
 
 def _calculate_scale(weights, bit_width, clip_threshold=1.):
     max_abs = weights.abs().max()

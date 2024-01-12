@@ -74,8 +74,7 @@ TORCHVISION_TOP1_MAP = {
     'mobilenet_v2': 71.898,
     'vit_b_32': 75.912,
     'inception_v3': 78.8,
-    'resnet50': 76.1, 
-    }
+    'resnet50': 76.1,}
 
 OPTIONS_DEFAULT = {
     'model_name': list(TORCHVISION_TOP1_MAP.keys()),
@@ -114,8 +113,7 @@ OPTIONS_DEFAULT = {
     'split_layerwise': [False],
     'split_input': [True],
     'grid_aware': [True],
-    'merge_bn': [True],
-}
+    'merge_bn': [True],}
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet PTQ Validation')
 parser.add_argument('idx', type=int)

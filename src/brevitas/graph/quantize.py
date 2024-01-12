@@ -26,7 +26,8 @@ from brevitas.graph.standardize import RemoveStochasticModules
 from brevitas.graph.standardize import TorchFunctionalToModule
 from brevitas.nn import quant_layer
 import brevitas.nn as qnn
-from brevitas.ptq_algorithms.channel_splitting import LayerwiseChannelSplitting, RegionwiseChannelSplitting
+from brevitas.ptq_algorithms.channel_splitting import LayerwiseChannelSplitting
+from brevitas.ptq_algorithms.channel_splitting import RegionwiseChannelSplitting
 from brevitas.quant import Int8ActPerTensorFloat
 from brevitas.quant import Int8ActPerTensorFloatMinMaxInit
 from brevitas.quant import Int8WeightPerTensorFloat

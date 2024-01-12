@@ -253,16 +253,9 @@ add_bool_arg(
     parser,
     'split-layerwise',
     default=False,
-    help=
-    'Input Channels are split layerwise, not regionwise (default: disabled)'
-)
+    help='Input Channels are split layerwise, not regionwise (default: disabled)')
 add_bool_arg(
-    parser,
-    'merge-bn',
-    default=True,
-    help=
-    'Merge Batch Normalization layers (default: enabled)'
-)
+    parser, 'merge-bn', default=True, help='Merge Batch Normalization layers (default: enabled)')
 
 
 def main():
