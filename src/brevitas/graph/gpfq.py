@@ -54,6 +54,9 @@ class GPFQ(GPxQ):
         self.index_computed = False
         self.p = p
 
+        # hack for tuning float layers
+        self.is_unquantized = False
+
     def collect_float_input(self, module, args, output):
         # this is the hook function to collect the float inputs of this layer
         inp = self.process_input(args)
@@ -192,6 +195,9 @@ class GPFQ(GPxQ):
                 self.quantized_input = inp_processed
             else:
                 self.quantized_input = torch.cat([self.quantized_input, inp_processed], dim=1)
+
+        if self.is_unquantized:
+            self.quantized_input = self.float_input
         # If we are executing GPFQ with group of parallel layers, we keep track of how many forward
         # we executed. Once we executed as many as the number of parallel_layers, we raise
         # StopFwdException
@@ -255,7 +261,11 @@ class GPFQ(GPxQ):
                     q_arg = torch.zeros_like(U[group_index, :, 0])
 
                 weight[group_index, :, permutation_list[group_index][t]] = q_arg
-            q = self.get_quant_weights(t, 0, permutation_list)
+
+            if self.is_unquantized:
+                q = self.get_float_weights(t, permutation_list)
+            else:
+                q = self.get_quant_weights(t, 0, permutation_list)
             for group_index in range(self.groups):
                 U[group_index] -= torch.matmul(
                     q[group_index].unsqueeze(1),
@@ -264,6 +274,50 @@ class GPFQ(GPxQ):
 
         del self.float_input
         del self.quantized_input
+
+    def get_float_weights(self, i, permutation_list):
+        # For QuantLinear and for some QuantConvolutional layers, we exploit the possibility
+        # of quantizing only a subset of the entire matrix speeding up the computation of GPxQ
+        if isinstance(self.layer, qnn.QuantLinear):
+            index = permutation_list[0][i]
+            subtensor_slice_list = [None, (index, index + 1)]
+            weight_slice_tuple = tuple(
+                slice(*s) if s is not None else slice(s) for s in subtensor_slice_list)
+            q = self.layer.weight[weight_slice_tuple].unsqueeze(0)  # [1, OC, 1]
+        elif isinstance(self.layer, SUPPORTED_CONV_OP):
+            if self.groups > 1 or (self.groups == 1 and isinstance(
+                    self.layer, (qnn.QuantConvTranspose1d, qnn.QuantConvTranspose2d))):
+
+                if isinstance(self.layer, (qnn.QuantConvTranspose1d, qnn.QuantConvTranspose2d)):
+                    weight = self.layer.weight.transpose(1, 0)  # This performs a view
+                weight = weight.flatten(1)
+                weight = weight.view(self.groups, -1, weight.shape[-1])
+
+                if self.act_order:
+                    for ii, perm in enumerate(permutation_list):
+                        weight[ii, :, :] = weight[ii, :, perm]
+
+                q = weight[:, :, i:i + 1]  # [groups, OC/groups, 1]
+            else:
+                index = permutation_list[0][i]
+                shapes = self.layer.weight.shape[1:]
+                index_2d_to_nd = []
+                residual_index = index.item()
+                for shape in shapes[::-1]:
+                    index_2d_to_nd.append((residual_index % shape, residual_index % shape + 1))
+                    residual_index = residual_index // shape
+                index_2d_to_nd = index_2d_to_nd[::-1]
+                index_2d_to_nd.insert(0, None)
+                weight_slice_tuple = tuple(
+                    slice(*s) if s is not None else slice(s) for s in index_2d_to_nd)
+                q = self.layer.weight[weight_slice_tuple].flatten(1)  # [OC, 1]
+                q = q.unsqueeze(0)  # [1, OC, 1]
+        # We need to remove the last dim
+        q = q.squeeze(2)  # [groups, OC/groups] or [1, OC]
+        return q
+
+    def mark_as_unquantized(self):
+        self.is_unquantized = True
 
 
 class A2GPFQ(GPFQ):
